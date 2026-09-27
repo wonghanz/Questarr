@@ -589,7 +589,7 @@ export class ImportManager {
           message: `"${meta.gameTitle}" finished downloading but its local path could not be accessed. Check Settings → Path Mappings or trigger the import manually.`,
           link: "/library",
         });
-        notifyUser("notification", notification);
+        notifyUser("notification", notification, notification.userId);
       } catch (err) {
         logger.error(
           { err, downloadId },
@@ -720,7 +720,7 @@ export class ImportManager {
           message: `"${game.title}" was flagged and quarantined. ${scanResult.reason ?? ""}`.trim(),
           link: "/downloads",
         });
-        notifyUser("notification", notification);
+        notifyUser("notification", notification, notification.userId);
 
         if (prefs.securityAlert.apprise) {
           await appriseClient.send(notification);

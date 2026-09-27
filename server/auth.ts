@@ -6,7 +6,7 @@ import { config } from "./config.js";
 import { type User } from "@shared/schema";
 import crypto from "crypto";
 import { logger } from "./logger.js";
-import { AUTH_COOKIE_NAME, getCookie } from "./security.js";
+import { AUTH_COOKIE_NAME, getCookie, parseCookies } from "./security.js";
 
 const SALT_ROUNDS = 10;
 
@@ -108,6 +108,42 @@ function getRequestToken(req: Request): { token: string; source: "cookie" | "bea
   }
 
   return undefined;
+}
+
+/**
+ * Resolve the user behind a Socket.IO handshake.
+ *
+ * The handshake is its own HTTP request and never passes through the Express
+ * auth middleware, so a connected socket has no user context until this runs.
+ * Browsers send the httpOnly auth cookie on a same-origin handshake; API
+ * clients can pass the token in the socket `auth` payload instead.
+ *
+ * Returns undefined for anything that does not verify, which leaves the socket
+ * anonymous rather than granting it another user's scope.
+ */
+export async function resolveSocketUser(handshake: {
+  auth?: { token?: unknown };
+  headers?: Record<string, string | string[] | undefined>;
+}): Promise<{ id: string; username: string } | undefined> {
+  const explicitToken = handshake.auth?.token;
+  let token = typeof explicitToken === "string" && explicitToken ? explicitToken : undefined;
+
+  if (!token) {
+    const rawCookie = handshake.headers?.cookie;
+    token = parseCookies(Array.isArray(rawCookie) ? rawCookie[0] : rawCookie)[AUTH_COOKIE_NAME];
+  }
+
+  if (!token) {
+    return undefined;
+  }
+
+  try {
+    const secret = await getJwtSecret();
+    const payload = jwt.verify(token, secret) as { id: string; username: string };
+    return { id: payload.id, username: payload.username };
+  } catch {
+    return undefined;
+  }
 }
 
 /**
